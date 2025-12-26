@@ -58,6 +58,39 @@ SESSION_CODE_LENGTH = 6
 SESSION_TIMEOUT_HOURS = 3
 CLEANUP_INTERVAL_SECONDS = 300  # Alle 5 Minuten aufräumen
 
+# Anonyme Tiernamen für Schüler
+ANONYMOUS_ANIMALS = [
+    ('🦊', 'Fuchs'), ('🐻', 'Bär'), ('🦁', 'Löwe'), ('🐯', 'Tiger'),
+    ('🦋', 'Schmetterling'), ('🐢', 'Schildkröte'), ('🦉', 'Eule'), ('🐬', 'Delfin'),
+    ('🦅', 'Adler'), ('🐺', 'Wolf'), ('🦌', 'Hirsch'), ('🐘', 'Elefant'),
+    ('🦒', 'Giraffe'), ('🐼', 'Panda'), ('🦜', 'Papagei'), ('🐨', 'Koala'),
+    ('🦩', 'Flamingo'), ('🐸', 'Frosch'), ('🦔', 'Igel'), ('🐿️', 'Eichhörnchen'),
+    ('🦭', 'Robbe'), ('🐧', 'Pinguin'), ('🦚', 'Pfau'), ('🐝', 'Biene'),
+    ('🦎', 'Eidechse'), ('🐙', 'Oktopus'), ('🦀', 'Krabbe'), ('🐌', 'Schnecke')
+]
+
+def get_anonymous_name(session_code, student_sid):
+    """Generiert einen anonymen Tiernamen für einen Schüler."""
+    with sessions_lock:
+        if session_code in sessions:
+            # Bereits verwendete Namen in dieser Session
+            used_indices = set()
+            for sid, student_data in sessions[session_code]['students'].items():
+                if 'animal_index' in student_data:
+                    used_indices.add(student_data['animal_index'])
+            
+            # Nächsten verfügbaren Namen finden
+            for i in range(len(ANONYMOUS_ANIMALS)):
+                if i not in used_indices:
+                    return i, ANONYMOUS_ANIMALS[i]
+            
+            # Fallback: zufällig mit Nummer
+            idx = random.randint(0, len(ANONYMOUS_ANIMALS) - 1)
+            emoji, name = ANONYMOUS_ANIMALS[idx]
+            return idx, (emoji, f"{name} {len(sessions[session_code]['students']) + 1}")
+    
+    return 0, ANONYMOUS_ANIMALS[0]
+
 def generate_session_code():
     """Generiert einen 6-stelligen alphanumerischen Code (ohne verwechselbare Zeichen)."""
     # Keine 0, O, I, l um Verwechslungen zu vermeiden
@@ -77,11 +110,14 @@ def create_session(teacher_sid, keys, pin=''):
             'teacher_sid': teacher_sid,
             'created': datetime.now(),
             'expires': datetime.now() + timedelta(hours=SESSION_TIMEOUT_HOURS),
-            'students': {},  # {sid: {'joined': datetime, 'name': optional}}
+            'students': {},  # {sid: {'joined': datetime, 'name': optional, 'anonymous_id': ...}}
             'text': '',  # Geteilter Text für alle Schüler
             'pin': pin,  # Optionaler PIN-Schutz für Lehrer-Dashboard
             'tasks': [],  # Generierte Aufgaben
             'tasks_available': False,  # Ob Aufgaben freigegeben sind
+            'translation_requests': {},  # {student_sid: {'language': 'tr', 'status': 'pending'/'approved'/'denied'}}
+            'simplification_enabled': False,  # Ob Textvereinfachung erlaubt ist
+            'student_levels': {},  # {student_sid: {'level': 'A1/A2/B1/original', 'anonymous_id': ...}}
         }
     return code
 
@@ -113,15 +149,21 @@ def end_session(code):
     return False
 
 def add_student_to_session(code, student_sid, student_name=None):
-    """Fügt einen Schüler zur Session hinzu."""
+    """Fügt einen Schüler zur Session hinzu mit anonymem Tiernamen."""
+    animal_index, (emoji, animal_name) = get_anonymous_name(code, student_sid)
+    
     with sessions_lock:
         if code in sessions:
             sessions[code]['students'][student_sid] = {
                 'joined': datetime.now(),
-                'name': student_name
+                'name': student_name,
+                'animal_index': animal_index,
+                'animal_emoji': emoji,
+                'animal_name': animal_name,
+                'anonymous_id': f"{emoji} {animal_name}"
             }
-            return True
-    return False
+            return sessions[code]['students'][student_sid]
+    return None
 
 def remove_student_from_session(code, student_sid):
     """Entfernt einen Schüler aus der Session."""
@@ -486,25 +528,31 @@ def handle_student_join_session(data):
         emit('join_error', {'error': 'Session nicht gefunden oder abgelaufen'})
         return
     
-    # Schüler zur Session hinzufügen
-    add_student_to_session(code, request.sid, name)
+    # Schüler zur Session hinzufügen (gibt Student-Daten zurück)
+    student_data = add_student_to_session(code, request.sid, name)
     join_room(code)
     
-    # Schüler bestätigen (inkl. vorhandener Einstellungen und Aufgaben)
+    # Schüler bestätigen (inkl. vorhandener Einstellungen, Aufgaben und anonyme ID)
     emit('join_success', {
         'code': code,
         'text': session.get('text', ''),
         'settings': session.get('settings', {}),
         'tasks_available': session.get('tasks_available', False),
-        'tasks': session.get('tasks', []) if session.get('tasks_available', False) else []
+        'tasks': session.get('tasks', []) if session.get('tasks_available', False) else [],
+        'anonymous_id': student_data.get('anonymous_id', '🐾 Gast') if student_data else '🐾 Gast',
+        'animal_emoji': student_data.get('animal_emoji', '🐾') if student_data else '🐾',
+        'animal_name': student_data.get('animal_name', 'Gast') if student_data else 'Gast',
+        'simplification_enabled': session.get('simplification_enabled', False)
     })
     
-    # Lehrer über neuen Schüler informieren
+    # Lehrer über neuen Schüler informieren (mit anonymer ID)
     student_count = len(session['students'])
     if session['teacher_sid']:
         socketio.emit('student_joined', {
             'count': student_count,
-            'name': name
+            'name': name,
+            'anonymous_id': student_data.get('anonymous_id', '🐾 Gast') if student_data else '🐾 Gast',
+            'student_sid': request.sid
         }, room=session['teacher_sid'])
 
 @socketio.on('teacher_end_session')
@@ -562,6 +610,679 @@ def handle_teacher_release_tasks(data):
         app.logger.info(f"Tasks released for session {code}: {len(tasks)} tasks")
     else:
         emit('session_error', {'error': 'Keine Berechtigung oder Session nicht gefunden'})
+
+# =============================================================================
+# TRANSLATION REQUESTS
+# =============================================================================
+
+LANGUAGE_NAMES = {
+    'tr': 'Türkisch',
+    'bg': 'Bulgarisch',
+    'de': 'Deutsch',
+    'ar': 'Arabisch',
+    'uk': 'Ukrainisch',
+    'en': 'Englisch'
+}
+
+@socketio.on('student_request_translation')
+def handle_student_request_translation(data):
+    """Schüler fordert Übersetzung an."""
+    code = data.get('code', '').upper().strip()
+    language = data.get('language', '')
+    
+    session = get_session(code)
+    if not session:
+        emit('translation_error', {'error': 'Session nicht gefunden'})
+        return
+    
+    # Schüler-Daten holen
+    student_data = session['students'].get(request.sid, {})
+    anonymous_id = student_data.get('anonymous_id', '🐾 Gast')
+    
+    # Anfrage speichern
+    with sessions_lock:
+        if code in sessions:
+            sessions[code]['translation_requests'][request.sid] = {
+                'language': language,
+                'language_name': LANGUAGE_NAMES.get(language, language),
+                'status': 'pending',
+                'anonymous_id': anonymous_id,
+                'requested_at': datetime.now().isoformat()
+            }
+    
+    # Bestätigung an Schüler
+    emit('translation_request_sent', {
+        'language': language,
+        'language_name': LANGUAGE_NAMES.get(language, language)
+    })
+    
+    # Lehrer benachrichtigen
+    if session['teacher_sid']:
+        socketio.emit('translation_request_received', {
+            'student_sid': request.sid,
+            'anonymous_id': anonymous_id,
+            'language': language,
+            'language_name': LANGUAGE_NAMES.get(language, language)
+        }, room=session['teacher_sid'])
+    
+    app.logger.info(f"Translation request from {anonymous_id} for {language} in session {code}")
+
+@socketio.on('teacher_approve_translation')
+def handle_teacher_approve_translation(data):
+    """Lehrer genehmigt Übersetzungsanfrage."""
+    code = data.get('code', '').upper().strip()
+    student_sid = data.get('student_sid', '')
+    layout = data.get('layout', 'side-by-side')  # Layout setting from teacher
+    
+    session = get_session(code)
+    if not session or session['teacher_sid'] != request.sid:
+        emit('session_error', {'error': 'Keine Berechtigung'})
+        return
+    
+    # Anfrage-Daten holen
+    translation_request = session.get('translation_requests', {}).get(student_sid, {})
+    if not translation_request:
+        emit('session_error', {'error': 'Anfrage nicht gefunden'})
+        return
+    
+    language = translation_request.get('language', '')
+    text = session.get('text', '')
+    
+    if not text:
+        emit('session_error', {'error': 'Kein Text zum Übersetzen'})
+        return
+    
+    # Text übersetzen
+    keys = session.get('keys', {})
+    ai_key = keys.get('ai', '')
+    ai_provider = keys.get('ai_provider', 'openai')
+    
+    if not ai_key:
+        # Ohne AI-Key einfach genehmigen und Schüler informieren (ohne Übersetzung)
+        with sessions_lock:
+            if code in sessions:
+                sessions[code]['translation_requests'][student_sid]['status'] = 'approved_no_translation'
+        
+        socketio.emit('translation_approved', {
+            'language': language,
+            'translated_text': None,
+            'layout': layout,
+            'message': 'Übersetzung genehmigt, aber kein AI-Key für automatische Übersetzung konfiguriert.'
+        }, room=student_sid)
+        return
+    
+    # Übersetzung durchführen
+    try:
+        translated_text = translate_text_with_ai(text, language, ai_key, ai_provider)
+        
+        # Status aktualisieren
+        with sessions_lock:
+            if code in sessions:
+                sessions[code]['translation_requests'][student_sid]['status'] = 'approved'
+                sessions[code]['translation_requests'][student_sid]['translated_text'] = translated_text
+        
+        # Übersetzung an Schüler senden (mit Layout)
+        socketio.emit('translation_approved', {
+            'language': language,
+            'language_name': LANGUAGE_NAMES.get(language, language),
+            'translated_text': translated_text,
+            'layout': layout
+        }, room=student_sid)
+        
+        # Lehrer bestätigen
+        emit('translation_sent', {
+            'student_sid': student_sid,
+            'anonymous_id': translation_request.get('anonymous_id', ''),
+            'success': True
+        })
+        
+        app.logger.info(f"Translation approved for {student_sid} in session {code} with layout {layout}")
+        
+    except Exception as e:
+        app.logger.error(f"Translation error: {e}")
+        emit('session_error', {'error': f'Übersetzungsfehler: {str(e)}'})
+
+@socketio.on('teacher_deny_translation')
+def handle_teacher_deny_translation(data):
+    """Lehrer lehnt Übersetzungsanfrage ab."""
+    code = data.get('code', '').upper().strip()
+    student_sid = data.get('student_sid', '')
+    
+    session = get_session(code)
+    if not session or session['teacher_sid'] != request.sid:
+        emit('session_error', {'error': 'Keine Berechtigung'})
+        return
+    
+    # Status aktualisieren
+    with sessions_lock:
+        if code in sessions and student_sid in sessions[code]['translation_requests']:
+            sessions[code]['translation_requests'][student_sid]['status'] = 'denied'
+    
+    # Schüler benachrichtigen
+    socketio.emit('translation_denied', {
+        'message': 'Deine Übersetzungsanfrage wurde abgelehnt.'
+    }, room=student_sid)
+    
+    # Lehrer bestätigen
+    translation_request = session.get('translation_requests', {}).get(student_sid, {})
+    emit('translation_request_removed', {
+        'student_sid': student_sid,
+        'anonymous_id': translation_request.get('anonymous_id', '')
+    })
+
+
+# =============================================================================
+# TEXT SIMPLIFICATION SOCKET EVENTS
+# =============================================================================
+
+@socketio.on('teacher_toggle_simplification')
+def handle_teacher_toggle_simplification(data):
+    """Lehrer aktiviert/deaktiviert Textvereinfachung."""
+    code = data.get('code', '').upper().strip()
+    enabled = data.get('enabled', False)
+    
+    session = get_session(code)
+    if not session or session['teacher_sid'] != request.sid:
+        emit('session_error', {'error': 'Keine Berechtigung'})
+        return
+    
+    with sessions_lock:
+        if code in sessions:
+            sessions[code]['simplification_enabled'] = enabled
+    
+    # Alle Schüler in der Session benachrichtigen
+    socketio.emit('simplification_status_changed', {
+        'enabled': enabled
+    }, room=code)
+    
+    app.logger.info(f"Simplification {'enabled' if enabled else 'disabled'} for session {code}")
+
+
+@socketio.on('student_using_simplified')
+def handle_student_using_simplified(data):
+    """Schüler informiert über genutztes Sprachniveau."""
+    code = data.get('code', '').upper().strip()
+    level = data.get('level', 'original')  # 'original', 'A1', 'A2', 'B1'
+    
+    session = get_session(code)
+    if not session:
+        return
+    
+    # Schüler-Info in Session speichern
+    with sessions_lock:
+        if code in sessions:
+            if 'student_levels' not in sessions[code]:
+                sessions[code]['student_levels'] = {}
+            
+            # Finde anonymous_id für diesen Schüler
+            anonymous_id = None
+            for sid, info in sessions[code].get('students', {}).items():
+                if sid == request.sid:
+                    anonymous_id = info.get('anonymous_id', sid[:8])
+                    break
+            
+            sessions[code]['student_levels'][request.sid] = {
+                'level': level,
+                'anonymous_id': anonymous_id,
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    # Lehrer informieren
+    teacher_sid = session.get('teacher_sid')
+    if teacher_sid:
+        socketio.emit('student_level_update', {
+            'student_sid': request.sid,
+            'anonymous_id': anonymous_id,
+            'level': level
+        }, room=teacher_sid)
+
+
+def translate_text_with_ai(text, target_language, ai_key, ai_provider):
+    """Übersetzt Text mit der konfigurierten KI."""
+    language_name = LANGUAGE_NAMES.get(target_language, target_language)
+    
+    prompt = f"""Übersetze den folgenden deutschen Text ins {language_name}. 
+Gib NUR die Übersetzung zurück, keine Erklärungen oder zusätzlichen Text.
+
+TEXT:
+{text}
+
+ÜBERSETZUNG:"""
+
+    if ai_provider == 'openai':
+        response = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {ai_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': 'gpt-4o-mini',
+                'messages': [{'role': 'user', 'content': prompt}],
+                'temperature': 0.3
+            }
+        )
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content'].strip()
+            
+    elif ai_provider == 'google':
+        response = requests.post(
+            f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={ai_key}',
+            headers={'Content-Type': 'application/json'},
+            json={
+                'contents': [{'parts': [{'text': prompt}]}],
+                'generationConfig': {'temperature': 0.3}
+            }
+        )
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+            
+    elif ai_provider == 'anthropic':
+        response = requests.post(
+            'https://api.anthropic.com/v1/messages',
+            headers={
+                'x-api-key': ai_key,
+                'anthropic-version': '2023-06-01',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': 'claude-sonnet-4-20250514',
+                'max_tokens': 4000,
+                'messages': [{'role': 'user', 'content': prompt}]
+            }
+        )
+        if response.status_code == 200:
+            return response.json()['content'][0]['text'].strip()
+    
+    raise Exception(f'Übersetzung fehlgeschlagen ({ai_provider})')
+
+# =============================================================================
+# WORD INFO & VOCABULARY SYSTEM
+# =============================================================================
+
+def get_word_info_from_ai(word, target_language, ai_key, ai_provider):
+    """Holt Wort-Informationen (Erklärung, Beispielsatz, Übersetzung) von der KI."""
+    language_name = LANGUAGE_NAMES.get(target_language, target_language) if target_language else None
+    
+    translation_part = ""
+    if language_name:
+        translation_part = f"\n- translation: Übersetzung ins {language_name}"
+    
+    prompt = f"""Analysiere das deutsche Wort "{word}" und gib die Informationen als JSON zurück.
+
+Antworte NUR mit dem JSON-Objekt, keine Erklärungen davor oder danach.
+
+{{
+    "word": "{word}",
+    "article": "der/die/das (nur bei Nomen, sonst leer)",
+    "plural": "Pluralform (nur bei Nomen, sonst leer)",
+    "word_type": "Nomen/Verb/Adjektiv/Adverb/Präposition/etc.",
+    "simple_explanation": "Einfache Erklärung in 1-2 Sätzen für Sprachlerner (A1-A2 Niveau)",
+    "example_sentence": "Ein einfacher Beispielsatz mit dem Wort",
+    "syllables": "Silbentrennung mit Bindestrichen (z.B. Hun-de-hüt-te)",
+    "translation": "{f'Übersetzung ins {language_name}' if language_name else 'keine Übersetzung angefordert'}"
+}}"""
+
+    try:
+        if ai_provider == 'openai':
+            response = requests.post(
+                'https://api.openai.com/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {ai_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': 'gpt-4o-mini',
+                    'messages': [{'role': 'user', 'content': prompt}],
+                    'temperature': 0.3
+                },
+                timeout=15
+            )
+            if response.status_code == 200:
+                content = response.json()['choices'][0]['message']['content'].strip()
+                # JSON extrahieren (falls Text drumherum)
+                json_match = re.search(r'\{[\s\S]*\}', content)
+                if json_match:
+                    return json.loads(json_match.group())
+                    
+        elif ai_provider == 'google':
+            response = requests.post(
+                f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={ai_key}',
+                headers={'Content-Type': 'application/json'},
+                json={
+                    'contents': [{'parts': [{'text': prompt}]}],
+                    'generationConfig': {'temperature': 0.3}
+                },
+                timeout=15
+            )
+            if response.status_code == 200:
+                content = response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                json_match = re.search(r'\{[\s\S]*\}', content)
+                if json_match:
+                    return json.loads(json_match.group())
+                    
+        elif ai_provider == 'anthropic':
+            response = requests.post(
+                'https://api.anthropic.com/v1/messages',
+                headers={
+                    'x-api-key': ai_key,
+                    'anthropic-version': '2023-06-01',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': 'claude-sonnet-4-20250514',
+                    'max_tokens': 1000,
+                    'messages': [{'role': 'user', 'content': prompt}]
+                },
+                timeout=15
+            )
+            if response.status_code == 200:
+                content = response.json()['content'][0]['text'].strip()
+                json_match = re.search(r'\{[\s\S]*\}', content)
+                if json_match:
+                    return json.loads(json_match.group())
+    except Exception as e:
+        app.logger.error(f"Word info AI error: {e}")
+    
+    return None
+
+
+def generate_word_image_gemini(word, explanation, ai_key):
+    """Generiert ein Bild für das Wort mit Gemini 2.5 Flash Image."""
+    try:
+        prompt = f"""Generate a simple, clear, educational illustration for the German word "{word}".
+Meaning: {explanation}
+
+Requirements:
+- Simple, clean clipart or illustration style
+- White or light background
+- No text in the image
+- Suitable for language learning
+- Child-friendly if applicable"""
+
+        # Gemini 2.5 Flash Image Model für Bildgenerierung
+        response = requests.post(
+            f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key={ai_key}',
+            headers={'Content-Type': 'application/json'},
+            json={
+                'contents': [{
+                    'parts': [{'text': prompt}]
+                }]
+            },
+            timeout=45
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            # Bild aus Response extrahieren
+            for candidate in result.get('candidates', []):
+                for part in candidate.get('content', {}).get('parts', []):
+                    if 'inlineData' in part:
+                        return {
+                            'image_base64': part['inlineData']['data'],
+                            'mime_type': part['inlineData'].get('mimeType', 'image/png')
+                        }
+            app.logger.warning(f"Gemini returned no image in response")
+        else:
+            app.logger.warning(f"Gemini image generation failed: {response.status_code} - {response.text[:300]}")
+        
+    except requests.exceptions.Timeout:
+        app.logger.warning("Gemini image generation timed out")
+    except Exception as e:
+        app.logger.error(f"Gemini image generation error: {e}")
+    
+    return None
+
+
+def search_unsplash_image(word, unsplash_key=None):
+    """Sucht ein passendes Bild auf Unsplash."""
+    if not unsplash_key:
+        return None
+    
+    try:
+        response = requests.get(
+            'https://api.unsplash.com/search/photos',
+            params={
+                'query': word,
+                'per_page': 1,
+                'orientation': 'squarish'
+            },
+            headers={
+                'Authorization': f'Client-ID {unsplash_key}'
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            results = response.json().get('results', [])
+            if results:
+                return {
+                    'image_url': results[0]['urls']['small'],
+                    'source': 'unsplash',
+                    'attribution': f"Foto von {results[0]['user']['name']} auf Unsplash"
+                }
+    except Exception as e:
+        app.logger.error(f"Unsplash search error: {e}")
+    
+    return None
+
+
+@app.route('/api/word-info', methods=['POST'])
+def get_word_info():
+    """Holt umfassende Informationen zu einem Wort (Erklärung, Bild, Übersetzung)."""
+    try:
+        data = request.json
+        word = data.get('word', '').strip()
+        session_code = data.get('session_code', '').upper().strip()
+        target_language = data.get('target_language', '')  # Optional: Sprache für Übersetzung
+        
+        if not word:
+            return jsonify({'error': 'Kein Wort angegeben'}), 400
+        
+        # Wort bereinigen (Interpunktion entfernen)
+        clean_word = re.sub(r'[^\w\säöüÄÖÜß-]', '', word).strip()
+        if not clean_word:
+            return jsonify({'error': 'Ungültiges Wort'}), 400
+        
+        # Session und Keys holen
+        session = get_session(session_code) if session_code else None
+        keys = session.get('keys', {}) if session else {}
+        ai_key = keys.get('ai', '')
+        ai_provider = keys.get('ai_provider', 'google')
+        
+        result = {
+            'word': clean_word,
+            'original_word': word
+        }
+        
+        # 1. Wort-Info von AI holen
+        if ai_key:
+            word_info = get_word_info_from_ai(clean_word, target_language, ai_key, ai_provider)
+            if word_info:
+                result.update(word_info)
+        else:
+            # Fallback ohne AI
+            result['simple_explanation'] = f'Keine Erklärung verfügbar (kein AI-Key konfiguriert)'
+            result['word_type'] = ''
+            result['article'] = ''
+        
+        # 2. Bild suchen/generieren
+        # Option A: Unsplash (wenn Key vorhanden - hier nicht implementiert da meist kein Key)
+        # Option B: Gemini Bildgenerierung
+        if ai_key and ai_provider == 'google':
+            explanation = result.get('simple_explanation', clean_word)
+            image_data = generate_word_image_gemini(clean_word, explanation, ai_key)
+            if image_data:
+                result['image'] = image_data
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        app.logger.error(f"Word info error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# TEXT SIMPLIFICATION (Sprachniveau-Anpassung)
+# =============================================================================
+
+SIMPLIFICATION_PROMPTS = {
+    'A1': """Vereinfache den folgenden deutschen Text auf Sprachniveau A1 (Anfänger).
+
+REGELN für A1:
+- NUR Präsens verwenden (keine Vergangenheit, kein Konjunktiv)
+- Sehr kurze Sätze (maximal 8 Wörter)
+- Nur Grundwortschatz (die 500 häufigsten Wörter)
+- Keine Nebensätze
+- Keine Passivkonstruktionen
+- Wiederhole wichtige Wörter statt Pronomen zu verwenden
+- Vermeide Metaphern und Redewendungen
+
+ORIGINALTEXT:
+{text}
+
+VEREINFACHTER TEXT (A1):""",
+
+    'A2': """Vereinfache den folgenden deutschen Text auf Sprachniveau A2 (Grundkenntnisse).
+
+REGELN für A2:
+- Präsens und Perfekt erlaubt
+- Kurze, klare Sätze (maximal 12 Wörter)
+- Alltagswortschatz
+- Einfache Nebensätze mit "weil", "dass", "wenn" erlaubt
+- Keine komplexen Passivkonstruktionen
+- Einfache Konnektoren: und, aber, oder, dann
+
+ORIGINALTEXT:
+{text}
+
+VEREINFACHTER TEXT (A2):""",
+
+    'B1': """Vereinfache den folgenden deutschen Text auf Sprachniveau B1 (Mittelstufe).
+
+REGELN für B1:
+- Alle Zeitformen erlaubt, aber klar strukturiert
+- Mittellange Sätze (maximal 18 Wörter)
+- Erweiterter Wortschatz, aber keine Fachbegriffe ohne Erklärung
+- Nebensätze erlaubt
+- Klare Textstruktur
+- Schwierige Wörter durch einfachere Synonyme ersetzen
+
+ORIGINALTEXT:
+{text}
+
+VEREINFACHTER TEXT (B1):"""
+}
+
+
+def simplify_text_with_ai(text, level, ai_key, ai_provider):
+    """Vereinfacht Text auf das angegebene Sprachniveau."""
+    
+    if level not in SIMPLIFICATION_PROMPTS:
+        raise ValueError(f"Unbekanntes Niveau: {level}")
+    
+    prompt = SIMPLIFICATION_PROMPTS[level].format(text=text)
+    
+    try:
+        if ai_provider == 'openai':
+            response = requests.post(
+                'https://api.openai.com/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {ai_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': 'gpt-4o-mini',
+                    'messages': [{'role': 'user', 'content': prompt}],
+                    'temperature': 0.3
+                },
+                timeout=30
+            )
+            if response.status_code == 200:
+                return response.json()['choices'][0]['message']['content'].strip()
+                
+        elif ai_provider == 'google':
+            response = requests.post(
+                f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={ai_key}',
+                headers={'Content-Type': 'application/json'},
+                json={
+                    'contents': [{'parts': [{'text': prompt}]}],
+                    'generationConfig': {'temperature': 0.3}
+                },
+                timeout=30
+            )
+            if response.status_code == 200:
+                return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                
+        elif ai_provider == 'anthropic':
+            response = requests.post(
+                'https://api.anthropic.com/v1/messages',
+                headers={
+                    'x-api-key': ai_key,
+                    'anthropic-version': '2023-06-01',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': 'claude-sonnet-4-20250514',
+                    'max_tokens': 4000,
+                    'messages': [{'role': 'user', 'content': prompt}]
+                },
+                timeout=30
+            )
+            if response.status_code == 200:
+                return response.json()['content'][0]['text'].strip()
+                
+    except Exception as e:
+        app.logger.error(f"Simplification error: {e}")
+        raise
+    
+    raise Exception(f'Textvereinfachung fehlgeschlagen ({ai_provider})')
+
+
+@app.route('/api/simplify-text', methods=['POST'])
+def simplify_text():
+    """Vereinfacht einen Text auf das gewünschte Sprachniveau."""
+    try:
+        data = request.json
+        text = data.get('text', '').strip()
+        level = data.get('level', 'A2').upper()
+        session_code = data.get('session_code', '').upper().strip()
+        
+        if not text:
+            return jsonify({'error': 'Kein Text angegeben'}), 400
+        
+        if level not in ['A1', 'A2', 'B1']:
+            return jsonify({'error': 'Ungültiges Niveau. Erlaubt: A1, A2, B1'}), 400
+        
+        # Session und Keys holen
+        session = get_session(session_code) if session_code else None
+        if not session:
+            return jsonify({'error': 'Session nicht gefunden'}), 404
+        
+        # Prüfen ob Feature erlaubt ist
+        if not session.get('simplification_enabled', False):
+            return jsonify({'error': 'Textvereinfachung ist nicht aktiviert'}), 403
+        
+        keys = session.get('keys', {})
+        ai_key = keys.get('ai', '')
+        ai_provider = keys.get('ai_provider', 'google')
+        
+        if not ai_key:
+            return jsonify({'error': 'Kein AI-Key konfiguriert'}), 400
+        
+        # Text vereinfachen
+        simplified = simplify_text_with_ai(text, level, ai_key, ai_provider)
+        
+        return jsonify({
+            'original_text': text,
+            'simplified_text': simplified,
+            'level': level
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Simplify text error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 # =============================================================================
 # FILE UPLOAD & TEXT EXTRACTION
@@ -781,8 +1502,11 @@ def proxy_tts():
             if not api_key:
                 return jsonify({'error': 'API Key oder Session-Code erforderlich'}), 400
         
-        # Cache prüfen
-        cache_key = get_cache_key(text, voice_id)
+        # Language code für multilinguale Stimme (Standard: Deutsch)
+        language_code = data.get('language_code', 'de')
+        
+        # Cache prüfen (inkl. Sprache)
+        cache_key = get_cache_key(text + language_code, voice_id)
         cached = get_from_cache(cache_key)
         if cached:
             app.logger.info(f"TTS Cache HIT")
@@ -796,9 +1520,13 @@ def proxy_tts():
             'Content-Type': 'application/json'
         }
         
+        # Language code für multilinguale Stimme (Standard: Deutsch)
+        language_code = data.get('language_code', 'de')
+        
         payload = {
             'text': text,
             'model_id': data.get('model_id', 'eleven_multilingual_v2'),
+            'language_code': language_code,
             'voice_settings': {
                 'stability': 0.5,
                 'similarity_boost': 0.75

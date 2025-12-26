@@ -535,6 +535,70 @@
             cursor: pointer;
         }
 
+        /* Simplification Usage Display */
+        .simplification-usage {
+            background: #F0FDF4;
+            border-radius: 8px;
+            padding: 0.75rem;
+        }
+
+        .usage-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .usage-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .usage-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            border: 1px solid #E5E7EB;
+        }
+
+        .usage-level {
+            font-weight: 700;
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
+
+        .usage-level.original {
+            background: #DBEAFE;
+            color: #1D4ED8;
+        }
+
+        .usage-level.a1 {
+            background: #FEE2E2;
+            color: #DC2626;
+        }
+
+        .usage-level.a2 {
+            background: #FEF3C7;
+            color: #D97706;
+        }
+
+        .usage-level.b1 {
+            background: #D1FAE5;
+            color: #059669;
+        }
+
+        .usage-empty {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+
         .btn-success {
             background: linear-gradient(135deg, var(--success) 0%, #34D399 100%);
             color: white;
@@ -765,6 +829,167 @@
             margin-top: 0.5rem;
             font-style: italic;
         }
+
+        /* Translation Requests Panel */
+        .translation-requests-panel {
+            background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+            border: 2px solid var(--primary-light);
+        }
+
+        .translation-requests-panel .card-title {
+            color: var(--primary);
+        }
+
+        .translation-request-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .translation-request-item {
+            background: white;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+            gap: 0.5rem;
+        }
+
+        .translation-request-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .translation-request-animal {
+            font-size: 1.5rem;
+        }
+
+        .translation-request-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .translation-request-name {
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        .translation-request-lang {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .translation-request-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .translation-request-actions button {
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .btn-approve {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-deny {
+            background: var(--error);
+            color: white;
+        }
+
+        .no-requests-message {
+            text-align: center;
+            padding: 1.5rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Translation Layout Settings */
+        .translation-layout-settings {
+            background: rgba(255,255,255,0.7);
+            border-radius: 10px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .layout-label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--primary);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .layout-options {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .layout-option {
+            flex: 1;
+            min-width: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0.5rem;
+            border: 2px solid var(--bg-light);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+        }
+
+        .layout-option:hover {
+            border-color: var(--primary-light);
+        }
+
+        .layout-option.selected {
+            border-color: var(--primary);
+            background: #EEF2FF;
+        }
+
+        .layout-option input {
+            display: none;
+        }
+
+        .layout-icon {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .layout-text {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .layout-hint {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .request-count-badge {
+            background: var(--error);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-left: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -983,6 +1208,26 @@
                         </div>
                     </div>
 
+                    <!-- Text Simplification -->
+                    <div class="a11y-section">
+                        <label class="a11y-label">📚 Differenzierung</label>
+                        <div class="checkbox-row">
+                            <input type="checkbox" id="simplificationCheckbox" onchange="toggleSimplification(this.checked)">
+                            <label for="simplificationCheckbox">Textvereinfachung erlauben</label>
+                        </div>
+                        <div class="simplification-hint" id="simplificationHint" style="display: none;">
+                            <small style="color: var(--text-muted);">
+                                ℹ️ Schüler können den Text auf Niveau A1, A2 oder B1 vereinfachen lassen.
+                            </small>
+                        </div>
+                        <div class="simplification-usage" id="simplificationUsage" style="display: none; margin-top: 0.75rem;">
+                            <div class="usage-label">📊 Aktuelle Nutzung:</div>
+                            <div class="usage-list" id="simplificationUsageList">
+                                <span class="usage-empty">Noch keine Daten</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Live Preview -->
                     <div class="preview-section">
                         <div class="preview-label">
@@ -1005,6 +1250,51 @@
                     <span class="status-badge success" id="settingsSentBadge" style="display: none; margin-left: 0.5rem;">
                         ✅ Gesendet
                     </span>
+                </div>
+            </div>
+
+            <!-- Translation Requests Panel -->
+            <div class="card translation-requests-panel" id="translationRequestsCard">
+                <div class="card-title">
+                    🌍 Übersetzungsanfragen
+                    <span class="request-count-badge" id="requestCountBadge" style="display: none;">0</span>
+                </div>
+                
+                <div style="margin-bottom: 1rem; color: var(--primary); font-size: 0.9rem;">
+                    Schüler können Übersetzungen anfordern. Du entscheidest, wer eine bekommt.
+                </div>
+
+                <!-- Layout Settings -->
+                <div class="translation-layout-settings">
+                    <label class="layout-label">📐 Anzeige-Layout:</label>
+                    <div class="layout-options">
+                        <label class="layout-option selected" onclick="selectLayoutOption(this)">
+                            <input type="radio" name="translationLayout" value="side-by-side" checked onchange="setTranslationLayout(this.value)">
+                            <span class="layout-icon">◫</span>
+                            <span class="layout-text">Nebeneinander</span>
+                            <span class="layout-hint">Kurze Texte</span>
+                        </label>
+                        <label class="layout-option" onclick="selectLayoutOption(this)">
+                            <input type="radio" name="translationLayout" value="stacked" onchange="setTranslationLayout(this.value)">
+                            <span class="layout-icon">▭</span>
+                            <span class="layout-text">Untereinander</span>
+                            <span class="layout-hint">Lange Texte</span>
+                        </label>
+                        <label class="layout-option" onclick="selectLayoutOption(this)">
+                            <input type="radio" name="translationLayout" value="translation-only" onchange="setTranslationLayout(this.value)">
+                            <span class="layout-icon">▢</span>
+                            <span class="layout-text">Nur Übersetzung</span>
+                            <span class="layout-hint">Kompakt</span>
+                        </label>
+                    </div>
+                </div>
+
+                <ul class="translation-request-list" id="translationRequestList">
+                    <!-- Requests will be added here -->
+                </ul>
+
+                <div class="no-requests-message" id="noRequestsMessage">
+                    Noch keine Anfragen.
                 </div>
             </div>
 
@@ -1060,6 +1350,8 @@
         let sessionPIN = '';
         let currentTasks = [];
         let tasksReleased = false;
+        let translationRequests = {};  // {student_sid: {anonymous_id, language, language_name}}
+        let translationLayout = 'side-by-side';  // 'side-by-side', 'stacked', 'translation-only'
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -1117,7 +1409,7 @@
 
             socket.on('student_joined', (data) => {
                 document.getElementById('studentCount').textContent = data.count;
-                showToast(`👋 Neuer Schüler beigetreten (${data.count} gesamt)`, 'success');
+                showToast(`👋 ${data.anonymous_id || 'Schüler'} beigetreten (${data.count} gesamt)`, 'success');
             });
 
             socket.on('student_left', (data) => {
@@ -1127,6 +1419,21 @@
             socket.on('session_ended_confirmed', () => {
                 showToast('Session beendet. Alle Keys gelöscht.', 'success');
                 showCreatePhase();
+            });
+            
+            // Translation request events
+            socket.on('translation_request_received', (data) => {
+                addTranslationRequest(data.student_sid, data.anonymous_id, data.language, data.language_name);
+                showToast(`🌍 ${data.anonymous_id} möchte Übersetzung auf ${data.language_name}`, 'info');
+            });
+            
+            socket.on('translation_sent', (data) => {
+                removeTranslationRequest(data.student_sid);
+                showToast(`✅ Übersetzung an ${data.anonymous_id} gesendet`, 'success');
+            });
+            
+            socket.on('translation_request_removed', (data) => {
+                removeTranslationRequest(data.student_sid);
             });
         }
 
@@ -1548,6 +1855,159 @@
             
             showToast(`📝 ${currentTasks.length} Aufgaben an Schüler freigegeben!`, 'success');
         }
+
+        // =============================================================================
+        // TRANSLATION REQUEST MANAGEMENT
+        // =============================================================================
+
+        function addTranslationRequest(studentSid, anonymousId, language, languageName) {
+            translationRequests[studentSid] = {
+                anonymous_id: anonymousId,
+                language: language,
+                language_name: languageName
+            };
+            renderTranslationRequests();
+        }
+
+        function removeTranslationRequest(studentSid) {
+            delete translationRequests[studentSid];
+            renderTranslationRequests();
+        }
+
+        function renderTranslationRequests() {
+            const list = document.getElementById('translationRequestList');
+            const noMsg = document.getElementById('noRequestsMessage');
+            const badge = document.getElementById('requestCountBadge');
+            
+            list.innerHTML = '';
+            const requestCount = Object.keys(translationRequests).length;
+            
+            if (requestCount === 0) {
+                noMsg.style.display = 'block';
+                badge.style.display = 'none';
+                return;
+            }
+            
+            noMsg.style.display = 'none';
+            badge.style.display = 'inline';
+            badge.textContent = requestCount;
+            
+            for (const [studentSid, request] of Object.entries(translationRequests)) {
+                const li = document.createElement('li');
+                li.className = 'translation-request-item';
+                li.innerHTML = `
+                    <div class="translation-request-info">
+                        <span class="translation-request-animal">${request.anonymous_id.split(' ')[0]}</span>
+                        <div class="translation-request-details">
+                            <span class="translation-request-name">${request.anonymous_id}</span>
+                            <span class="translation-request-lang">→ ${request.language_name}</span>
+                        </div>
+                    </div>
+                    <div class="translation-request-actions">
+                        <button class="btn-approve" onclick="approveTranslation('${studentSid}')">✓ Genehmigen</button>
+                        <button class="btn-deny" onclick="denyTranslation('${studentSid}')">✕</button>
+                    </div>
+                `;
+                list.appendChild(li);
+            }
+        }
+
+        function approveTranslation(studentSid) {
+            if (!currentSessionCode) {
+                showToast('Keine aktive Session', 'error');
+                return;
+            }
+            
+            socket.emit('teacher_approve_translation', {
+                code: currentSessionCode,
+                student_sid: studentSid,
+                layout: translationLayout  // Include layout setting
+            });
+            
+            // Show loading state
+            showToast('⏳ Übersetzung wird erstellt...', 'info');
+        }
+
+        function denyTranslation(studentSid) {
+            if (!currentSessionCode) {
+                showToast('Keine aktive Session', 'error');
+                return;
+            }
+            
+            socket.emit('teacher_deny_translation', {
+                code: currentSessionCode,
+                student_sid: studentSid
+            });
+            
+            removeTranslationRequest(studentSid);
+        }
+
+        function setTranslationLayout(layout) {
+            translationLayout = layout;
+            console.log('Translation layout set to:', layout);
+        }
+
+        function selectLayoutOption(element) {
+            // Remove selected class from all options
+            document.querySelectorAll('.layout-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            // Add selected class to clicked option
+            element.classList.add('selected');
+        }
+
+        // =============================================================================
+        // TEXT SIMPLIFICATION
+        // =============================================================================
+
+        let simplificationEnabled = false;
+        let studentLevels = {};  // {student_sid: {level, anonymous_id}}
+
+        function toggleSimplification(enabled) {
+            simplificationEnabled = enabled;
+            
+            // UI aktualisieren
+            document.getElementById('simplificationHint').style.display = enabled ? 'block' : 'none';
+            document.getElementById('simplificationUsage').style.display = enabled ? 'block' : 'none';
+            
+            // Server informieren
+            socket.emit('teacher_toggle_simplification', {
+                code: currentSessionCode,
+                enabled: enabled
+            });
+            
+            console.log('Simplification', enabled ? 'enabled' : 'disabled', 'for session', currentSessionCode);
+        }
+
+        function updateSimplificationUsage() {
+            const list = document.getElementById('simplificationUsageList');
+            const entries = Object.entries(studentLevels);
+            
+            if (entries.length === 0) {
+                list.innerHTML = '<span class="usage-empty">Noch keine Daten</span>';
+                return;
+            }
+            
+            list.innerHTML = entries.map(([sid, data]) => {
+                const levelClass = data.level.toLowerCase().replace('-', '');
+                const levelDisplay = data.level === 'original' ? 'Original' : data.level;
+                return `
+                    <div class="usage-item">
+                        <span>${data.anonymous_id || '🐾'}</span>
+                        <span class="usage-level ${levelClass}">${levelDisplay}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Socket event für Schüler-Level-Updates
+        socket.on('student_level_update', (data) => {
+            studentLevels[data.student_sid] = {
+                level: data.level,
+                anonymous_id: data.anonymous_id
+            };
+            updateSimplificationUsage();
+        });
     </script>
 </body>
 </html>
